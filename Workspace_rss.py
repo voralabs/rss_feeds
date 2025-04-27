@@ -102,8 +102,8 @@ def article_exists(source_url, guid):
 def insert_article(data):
     try:
         res = supabase.table('articles').insert(data).execute()
-        if res.status_code >= 400:
-            logging.error(f"Failed to insert article: {res.data}")
+        if res.error:
+            logging.error(f"Failed to insert article: {res.error}")
             return False
         return True
     except Exception as e:
@@ -119,7 +119,9 @@ def fetch_and_store():
         url = feed.get('url')
         logging.info(f"Processing feed: {name} ({url})")
         headers = {
-            'User-Agent': 'RSSAggregatorBot/1.0 (+https://your-repo-link)'
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
+            "Accept": "application/rss+xml,application/xml,text/xml;q=0.9,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.5",
         }
         try:
             resp = requests.get(url, headers=headers, timeout=20)
