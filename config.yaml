@@ -1,0 +1,7 @@
+feeds:
+  - name: "Mint - Top Stories"
+    url: "https://www.livemint.com/rss/news"
+  - name: "Hindustan Times - Top News"
+    url: "https://www.hindustantimes.com/feeds/rss/india-news/rssfeed.xml"
+  - name: "Example Blog Feed"
+    url: "https://example.com/feed.xml"
