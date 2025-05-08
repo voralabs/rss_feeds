@@ -110,6 +110,60 @@ def insert_article(data):
         logging.error(f"Insert failed: {e}")
         return False
 
+def upsert_feed_metadata(source_url, feed_data):
+    """
+    Upsert channel metadata (title, description) into the feeds table.
+    """
+    try:
+        title = feed_data.feed.get('title', None)
+        description = feed_data.feed.get('description', None)
+        now = datetime.now(timezone.utc).isoformat()
+        data = {
+            'source_url': source_url,
+            'title': title,
+            'description': description,
+            'last_fetched_at': now
+        }
+        # Upsert by source_url
+        res = supabase.table('feeds').upsert(data, on_conflict=['source_url']).execute()
+        if res.error:
+            logging.error(f"Failed to upsert feed metadata for {source_url}: {res.error}")
+    except Exception as e:
+        logging.error(f"Error upserting feed metadata for {source_url}: {e}")
+
+def extract_image_url(entry):
+    """
+    Try to extract the best image URL from an RSS/Atom entry.
+    """
+    # Try media_content
+    if hasattr(entry, 'media_content'):
+        media = entry.media_content
+        if isinstance(media, list) and len(media) > 0 and 'url' in media[0]:
+            return media[0]['url']
+    # Try media_thumbnail
+    if hasattr(entry, 'media_thumbnail'):
+        media = entry.media_thumbnail
+        if isinstance(media, list) and len(media) > 0 and 'url' in media[0]:
+            return media[0]['url']
+    # Try enclosures
+    if hasattr(entry, 'enclosures'):
+        enclosures = entry.enclosures
+        for enc in enclosures:
+            if 'type' in enc and enc['type'].startswith('image') and 'href' in enc:
+                return enc['href']
+    # Try image field
+    if hasattr(entry, 'image') and 'href' in entry.image:
+        return entry.image['href']
+    # Try links with rel="enclosure"
+    if hasattr(entry, 'links'):
+        for link in entry.links:
+            if link.get('rel') == 'enclosure' and link.get('type', '').startswith('image') and 'href' in link:
+                return link['href']
+    # Some feeds put image in a custom field
+    if hasattr(entry, 'image_url'):
+        return entry.image_url
+    return None
+
 # ----------------------------
 # Main Fetch & Store Logic
 # ----------------------------
@@ -132,12 +186,15 @@ def fetch_and_store():
             if feed_data.bozo:
                 logging.error(f"Feed parsing error for {url}: {feed_data.bozo_exception}")
                 continue
+            # Upsert channel metadata
+            upsert_feed_metadata(url, feed_data)
             for entry in feed_data.entries:
                 title = getattr(entry, 'title', '').strip()
                 link = getattr(entry, 'link', '').strip()
                 summary = clean_summary(getattr(entry, 'summary', '') or getattr(entry, 'description', ''))
                 published_at = parse_datetime(entry)
                 guid = get_guid(entry)
+                image_url = extract_image_url(entry)
 
                 # Data Quality Checks
                 if not title or not link:
@@ -166,6 +223,7 @@ def fetch_and_store():
                     'summary': summary,
                     'published_at': published_at.isoformat(),
                     # 'Workspaceed_at' will default to now() in DB
+                    'image_url': image_url
                 }
                 success = insert_article(article)
                 if success:
